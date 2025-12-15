@@ -24,10 +24,12 @@
 				position: fixed;
 				top: 20px;
 				left: 20px;
-				background: rgba(0, 0, 0, 0.7);
+				background: rgba(0, 0, 0, 0.8);
 				padding: 20px;
 				border-radius: 8px;
-				min-width: 280px;
+				min-width: 320px;
+				max-height: calc(100vh - 40px);
+				overflow-y: auto;
 			}
 			#controls h2 {
 				margin-bottom: 15px;
@@ -58,23 +60,33 @@
 				color: #fff;
 				border-radius: 4px;
 			}
-			.preset-buttons {
-				display: flex;
-				gap: 8px;
-				flex-wrap: wrap;
-				margin-bottom: 15px;
-			}
-			.preset-buttons button {
-				padding: 6px 12px;
-				background: #335;
-				border: none;
+			.control-group select {
+				width: 100%;
+				padding: 8px;
+				background: #333;
+				border: 1px solid #555;
 				color: #fff;
 				border-radius: 4px;
-				cursor: pointer;
-				font-size: 12px;
+				font-size: 14px;
 			}
-			.preset-buttons button:hover {
-				background: #447;
+			.method-info {
+				font-size: 11px;
+				color: #888;
+				margin-top: 5px;
+				line-height: 1.4;
+			}
+			.param-group {
+				background: rgba(255, 255, 255, 0.05);
+				padding: 10px;
+				border-radius: 4px;
+				margin-bottom: 15px;
+			}
+			.param-group h3 {
+				font-size: 12px;
+				color: #7df;
+				margin-bottom: 10px;
+				text-transform: uppercase;
+				letter-spacing: 0.5px;
 			}
 			#info {
 				position: fixed;
@@ -83,6 +95,15 @@
 				font-size: 12px;
 				color: #666;
 			}
+			.checkbox-row {
+				display: flex;
+				gap: 20px;
+			}
+			.checkbox-row label {
+				display: flex;
+				align-items: center;
+				gap: 5px;
+			}
 		</style>
 	</head>
 	<body>
@@ -90,39 +111,45 @@
 		<div id="controls">
 			<h2>Sphere LDS Explorer</h2>
 
-			<div class="preset-buttons">
-				<button onclick="setPreset('phi-phi')">φ, φ</button>
-				<button onclick="setPreset('phi-phi2')">φ, φ²</button>
-				<button onclick="setPreset('phi-sqrt2')">φ, √2</button>
-				<button onclick="setPreset('plastic')">Plastic</button>
+			<div class="control-group">
+				<label>Method</label>
+				<select id="method">
+					<option value="r2">R2 Sequence (Plastic Constant)</option>
+					<option value="fibonacci">Fibonacci Sphere (Golden Spiral)</option>
+					<option value="halton">Halton Sequence</option>
+					<option value="kritzinger">Kritzinger Spherical</option>
+					<option value="random">Random (for comparison)</option>
+				</select>
+				<div class="method-info" id="method-info"></div>
 			</div>
 
-			<div class="control-group">
-				<label
-					>p1 (step size in turns): <span class="value" id="p1-val"></span
-				></label>
-				<input
-					type="range"
-					id="p1"
-					min="0"
-					max="1"
-					step="0.0001"
-					value="0.618033988749895"
-				/>
+			<div class="param-group" id="r2-params">
+				<h3>R2 Parameters</h3>
+				<div class="control-group">
+					<label>α₁: <span class="value" id="a1-val"></span></label>
+					<input type="range" id="a1" min="0" max="1" step="0.0001" value="0.7548776662466927" />
+				</div>
+				<div class="control-group">
+					<label>α₂: <span class="value" id="a2-val"></span></label>
+					<input type="range" id="a2" min="0" max="1" step="0.0001" value="0.5698402909980532" />
+				</div>
+				<div class="control-group">
+					<label style="font-size: 11px; color: #666;">
+						Defaults are 1/g and 1/g² where g ≈ 1.32472 is the plastic constant
+					</label>
+				</div>
 			</div>
 
-			<div class="control-group">
-				<label
-					>p2 (rotation in turns): <span class="value" id="p2-val"></span
-				></label>
-				<input
-					type="range"
-					id="p2"
-					min="0"
-					max="1"
-					step="0.0001"
-					value="0.618033988749895"
-				/>
+			<div class="param-group" id="halton-params" style="display: none;">
+				<h3>Halton Parameters</h3>
+				<div class="control-group">
+					<label>Base 1 (longitude)</label>
+					<input type="number" id="base1" min="2" max="100" value="2" />
+				</div>
+				<div class="control-group">
+					<label>Base 2 (latitude)</label>
+					<input type="number" id="base2" min="2" max="100" value="3" />
+				</div>
 			</div>
 
 			<div class="control-group">
@@ -132,24 +159,19 @@
 
 			<div class="control-group">
 				<label>Point size</label>
-				<input
-					type="range"
-					id="pointSize"
-					min="1"
-					max="20"
-					step="0.5"
-					value="4"
-				/>
+				<input type="range" id="pointSize" min="1" max="20" step="0.5" value="4" />
 			</div>
 
-			<div class="control-group">
+			<div class="control-group checkbox-row">
 				<label>
-					<input type="checkbox" id="showSphere" checked /> Show sphere
+					<input type="checkbox" id="showSphere" checked /> Sphere
 				</label>
-			</div>
-
-			<div class="control-group">
-				<label> <input type="checkbox" id="showPath" /> Show path </label>
+				<label>
+					<input type="checkbox" id="showPath" /> Path
+				</label>
+				<label>
+					<input type="checkbox" id="animate" /> Animate
+				</label>
 			</div>
 		</div>
 
@@ -169,12 +191,20 @@
 			import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 			// Constants
-			const PHI = 1.618033988749894; // Golden ratio ≈ 1.618
-			const PHI_FRAC = PHI - 1; // Fractional part ≈ 0.618
-			const PHI_SQ_FRAC = (PHI * PHI) % 1; // φ² mod 1
-			const SQRT2_FRAC = Math.sqrt(2) - 1; // √2 fractional
-			const PLASTIC = 1.324717957244746; // Plastic constant
-			const PLASTIC_FRAC = PLASTIC - 1;
+			const PHI = (1 + Math.sqrt(5)) / 2; // Golden ratio
+			const PLASTIC = 1.32471795724474602596; // Plastic constant (real root of x³ = x + 1)
+
+			// Method descriptions
+			const methodInfo = {
+				r2: "Maps the R2 sequence to sphere via equal-area projection. Uses plastic constant for optimal 2D gap-filling. O(1) per point.",
+				fibonacci:
+					"Classic Fibonacci sphere / golden spiral. Very uniform but creates visible spiral structure. O(1) per point.",
+				halton:
+					"Halton sequence mapped to sphere. Different prime bases for each axis. O(log n) per point.",
+				kritzinger:
+					"Kritzinger's spherical sequence using golden ratio for longitude and sqrt for latitude. O(1) per point.",
+				random: "Uniform random points for comparison. Not low-discrepancy.",
+			};
 
 			// Scene setup
 			const container = document.getElementById("container");
@@ -211,85 +241,135 @@
 			let pointsObj = null;
 			let lineObj = null;
 
-			// Generate LDS points on sphere
-			// Uses quaternion to represent full frame state (position + heading)
-			// Frame convention: local X = right, local Y = forward, local Z = up (position on sphere)
-			function generatePoints(p1, p2, n) {
-				const points = [];
+			// ============================================
+			// LDS Generation Methods
+			// ============================================
 
-				// Frame quaternion - starts at identity (pos = +Z, facing = +Y, right = +X)
-				// We'll remap at the end so visual "up" is +Y
-				let frame = new THREE.Quaternion();
-
-				// // TEST use multiple axies which each update
-				// let a1 = new THREE.Vector3(1, 0, 0);
-				// let a2 = new THREE.Vector3(0, 1, 0);
-				// let a3 = new THREE.Vector3(0, 0, 1);
-
-				// Pre-compute the step rotation (pitch forward by p1 turns around local X axis)
-				const stepAngle = p1 * Math.PI * 2;
-				const stepQuat = new THREE.Quaternion().setFromAxisAngle(
-					new THREE.Vector3(1, 0, 0),
-					stepAngle,
-				);
-
-				// // Pre-compute the turn rotation (yaw by p2 turns around local Z axis)
-				// const turnAngle = p2 * Math.PI * 2;
-				// const turnQuat = new THREE.Quaternion().setFromAxisAngle(
-				//   pos,
-				//   turnAngle
-				// );
-
-				// Local Z axis in world coords gives our position on sphere
-				const localZ = new THREE.Vector3(0, 0, 1);
-
-				for (let i = 0; i < n; i++) {
-					// // TEST: alternate rotating axies around each other
-					// 	points.push(a1.clone());
-
-					// const stepAngle = p1 * Math.PI * 2;
-					// const t1 = new THREE.Quaternion().setFromAxisAngle(a1, stepAngle);
-					// 	a2.applyQuaternion(t1)
-					// 	a3.applyQuaternion(t1)
-
-					// 	const turnAngle = p2 * Math.PI * 2;
-					//  const t2 = new THREE.Quaternion().setFromAxisAngle(a2, turnAngle);
-					//  a1.applyQuaternion(t2)
-					//  a3.applyQuaternion(t2)
-
-					// 	const twistAngle = p2 * Math.PI * 2;
-					//  const t3 = new THREE.Quaternion().setFromAxisAngle(a3, turnAngle);
-					//  a1.applyQuaternion(t2)
-					//  a2.applyQuaternion(t2)
-
-					// Extract position (local +Z transformed to world)
-					const pos = localZ.clone().applyQuaternion(frame);
-					points.push(pos);
-
-					// new turn axis per step
-					const turnAngle = p2 * Math.PI * 2;
-					const turnQuat = new THREE.Quaternion().setFromAxisAngle(
-						pos,
-						turnAngle,
-					);
-
-					// Combined per-step rotation: step forward, then turn
-					const combinedQuat = new THREE.Quaternion().multiplyQuaternions(
-						turnQuat,
-						stepQuat,
-					);
-
-					// Apply combined rotation: frame = frame * combinedQuat
-					frame.multiply(combinedQuat);
-					frame.normalize(); // numerical stability
+			// Halton sequence for a given base
+			function halton(index, base) {
+				let result = 0;
+				let f = 1 / base;
+				let i = index;
+				while (i > 0) {
+					result += f * (i % base);
+					i = Math.floor(i / base);
+					f /= base;
 				}
+				return result;
+			}
 
+			// R2 sequence mapped to sphere
+			// Uses equal-area cylindrical projection (Lambert)
+			function generateR2(n, alpha1, alpha2) {
+				const points = [];
+				for (let i = 0; i < n; i++) {
+					// R2 sequence in unit square
+					const u = (0.5 + i * alpha1) % 1;
+					const v = (0.5 + i * alpha2) % 1;
+
+					// Map to sphere via equal-area projection
+					// theta = longitude, phi = latitude
+					const theta = 2 * Math.PI * u;
+					const z = 1 - 2 * v; // z in [-1, 1]
+					const r = Math.sqrt(1 - z * z);
+
+					points.push(
+						new THREE.Vector3(r * Math.cos(theta), z, r * Math.sin(theta)),
+					);
+				}
 				return points;
 			}
 
+			// Fibonacci sphere (golden spiral)
+			function generateFibonacci(n) {
+				const points = [];
+				const goldenAngle = Math.PI * (3 - Math.sqrt(5)); // ~2.4 radians
+
+				for (let i = 0; i < n; i++) {
+					// Distribute points evenly along z-axis
+					const z = 1 - (2 * i + 1) / n;
+					const r = Math.sqrt(1 - z * z);
+
+					// Golden angle increment for longitude
+					const theta = goldenAngle * i;
+
+					points.push(
+						new THREE.Vector3(r * Math.cos(theta), z, r * Math.sin(theta)),
+					);
+				}
+				return points;
+			}
+
+			// Halton sequence on sphere
+			function generateHalton(n, base1, base2) {
+				const points = [];
+				for (let i = 1; i <= n; i++) {
+					// Skip 0 for Halton
+					const u = halton(i, base1);
+					const v = halton(i, base2);
+
+					const theta = 2 * Math.PI * u;
+					const z = 1 - 2 * v;
+					const r = Math.sqrt(1 - z * z);
+
+					points.push(
+						new THREE.Vector3(r * Math.cos(theta), z, r * Math.sin(theta)),
+					);
+				}
+				return points;
+			}
+
+			// Kritzinger's spherical sequence
+			// Uses golden ratio for longitude, different approach for latitude
+			function generateKritzinger(n) {
+				const points = [];
+				const phiInv = 1 / PHI;
+
+				for (let i = 0; i < n; i++) {
+					// Longitude: golden ratio sequence
+					const u = (i * phiInv) % 1;
+					const theta = 2 * Math.PI * u;
+
+					// Latitude: square root spacing for equal-area
+					// This ensures points are distributed by area, not angle
+					const v = (i + 0.5) / n;
+					const z = 1 - 2 * v;
+					const r = Math.sqrt(1 - z * z);
+
+					points.push(
+						new THREE.Vector3(r * Math.cos(theta), z, r * Math.sin(theta)),
+					);
+				}
+				return points;
+			}
+
+			// Random (for comparison)
+			function generateRandom(n) {
+				const points = [];
+				for (let i = 0; i < n; i++) {
+					// Uniform on sphere via rejection or direct method
+					const u = Math.random();
+					const v = Math.random();
+
+					const theta = 2 * Math.PI * u;
+					const z = 1 - 2 * v;
+					const r = Math.sqrt(1 - z * z);
+
+					points.push(
+						new THREE.Vector3(r * Math.cos(theta), z, r * Math.sin(theta)),
+					);
+				}
+				return points;
+			}
+
+			// ============================================
+			// Visualization
+			// ============================================
+
+			let animationOffset = 0;
+
 			function updateVisualization() {
-				const p1 = parseFloat(document.getElementById("p1").value);
-				const p2 = parseFloat(document.getElementById("p2").value);
+				const method = document.getElementById("method").value;
 				const n = parseInt(document.getElementById("n").value);
 				const pointSize = parseFloat(
 					document.getElementById("pointSize").value,
@@ -297,16 +377,54 @@
 				const showSphere = document.getElementById("showSphere").checked;
 				const showPath = document.getElementById("showPath").checked;
 
-				// Update display values
-				document.getElementById("p1-val").textContent = p1.toFixed(6);
-				document.getElementById("p2-val").textContent = p2.toFixed(6);
+				// Update method info
+				document.getElementById("method-info").textContent = methodInfo[method];
 
-				// Generate points
-				const points = generatePoints(p1, p2, n);
+				// Show/hide parameter groups
+				document.getElementById("r2-params").style.display =
+					method === "r2" ? "block" : "none";
+				document.getElementById("halton-params").style.display =
+					method === "halton" ? "block" : "none";
+
+				// Update parameter displays
+				const a1 = parseFloat(document.getElementById("a1").value);
+				const a2 = parseFloat(document.getElementById("a2").value);
+				document.getElementById("a1-val").textContent = a1.toFixed(6);
+				document.getElementById("a2-val").textContent = a2.toFixed(6);
+
+				// Generate points based on method
+				let points;
+				switch (method) {
+					case "r2":
+						points = generateR2(n, a1, a2);
+						break;
+					case "fibonacci":
+						points = generateFibonacci(n);
+						break;
+					case "halton":
+						const base1 = parseInt(document.getElementById("base1").value);
+						const base2 = parseInt(document.getElementById("base2").value);
+						points = generateHalton(n, base1, base2);
+						break;
+					case "kritzinger":
+						points = generateKritzinger(n);
+						break;
+					case "random":
+						points = generateRandom(n);
+						break;
+				}
 
 				// Remove old objects
-				if (pointsObj) scene.remove(pointsObj);
-				if (lineObj) scene.remove(lineObj);
+				if (pointsObj) {
+					scene.remove(pointsObj);
+					pointsObj.geometry.dispose();
+					pointsObj.material.dispose();
+				}
+				if (lineObj) {
+					scene.remove(lineObj);
+					lineObj.geometry.dispose();
+					lineObj.material.dispose();
+				}
 
 				// Create points geometry
 				const geometry = new THREE.BufferGeometry();
@@ -319,7 +437,7 @@
 					positions[i * 3 + 2] = points[i].z;
 
 					// Color gradient: early points are blue, late points are orange
-					const t = i / points.length;
+					const t = ((i + animationOffset) % points.length) / points.length;
 					colors[i * 3] = t;
 					colors[i * 3 + 1] = 0.5 - Math.abs(t - 0.5);
 					colors[i * 3 + 2] = 1 - t;
@@ -351,8 +469,8 @@
 
 					const lineMat = new THREE.LineBasicMaterial({
 						vertexColors: true,
-						transparent: false,
-						opacity: 0.4,
+						transparent: true,
+						opacity: 0.5,
 					});
 
 					lineObj = new THREE.Line(lineGeom, lineMat);
@@ -363,40 +481,22 @@
 				sphere.visible = showSphere;
 			}
 
-			// Presets
-			window.setPreset = function (name) {
-				const p1Input = document.getElementById("p1");
-				const p2Input = document.getElementById("p2");
-
-				switch (name) {
-					case "phi-phi":
-						p1Input.value = PHI_FRAC;
-						p2Input.value = PHI_FRAC;
-						break;
-					case "phi-phi2":
-						p1Input.value = PHI_FRAC;
-						p2Input.value = PHI_SQ_FRAC;
-						break;
-					case "phi-sqrt2":
-						p1Input.value = PHI_FRAC;
-						p2Input.value = SQRT2_FRAC;
-						break;
-					case "plastic":
-						p1Input.value = PLASTIC_FRAC;
-						p2Input.value = PLASTIC_FRAC;
-						break;
-				}
-
-				updateVisualization();
-			};
-
 			// Event listeners
 			document
-				.getElementById("p1")
+				.getElementById("method")
+				.addEventListener("change", updateVisualization);
+			document
+				.getElementById("a1")
 				.addEventListener("input", updateVisualization);
 			document
-				.getElementById("p2")
+				.getElementById("a2")
 				.addEventListener("input", updateVisualization);
+			document
+				.getElementById("base1")
+				.addEventListener("change", updateVisualization);
+			document
+				.getElementById("base2")
+				.addEventListener("change", updateVisualization);
 			document
 				.getElementById("n")
 				.addEventListener("change", updateVisualization);
@@ -422,6 +522,12 @@
 			// Animation loop
 			function animate() {
 				requestAnimationFrame(animate);
+
+				if (document.getElementById("animate").checked) {
+					animationOffset += 2;
+					updateVisualization();
+				}
+
 				controls.update();
 				renderer.render(scene, camera);
 			}
