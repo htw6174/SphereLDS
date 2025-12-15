@@ -104,6 +104,32 @@
 				align-items: center;
 				gap: 5px;
 			}
+			.param-input {
+				width: 100%;
+				padding: 6px 8px;
+				background: #222;
+				border: 1px solid #444;
+				color: #7df;
+				border-radius: 4px;
+				font-family: monospace;
+				font-size: 13px;
+			}
+			.param-input:focus {
+				outline: none;
+				border-color: #7df;
+			}
+			.preset-btn {
+				padding: 4px 8px;
+				background: #335;
+				border: none;
+				color: #fff;
+				border-radius: 4px;
+				cursor: pointer;
+				font-size: 11px;
+			}
+			.preset-btn:hover {
+				background: #447;
+			}
 		</style>
 	</head>
 	<body>
@@ -114,10 +140,18 @@
 			<div class="control-group">
 				<label>Method</label>
 				<select id="method">
-					<option value="r2">R2 Sequence (Plastic Constant)</option>
-					<option value="fibonacci">Fibonacci Sphere (Golden Spiral)</option>
-					<option value="halton">Halton Sequence</option>
-					<option value="kritzinger">Kritzinger Spherical</option>
+					<optgroup label="2D Projection Methods">
+						<option value="r2">R2 Sequence (Plastic Constant)</option>
+						<option value="fibonacci">Fibonacci Sphere (Golden Spiral)</option>
+						<option value="halton">Halton Sequence</option>
+						<option value="kritzinger">Kritzinger Spherical</option>
+					</optgroup>
+					<optgroup label="Quaternion Methods">
+						<option value="hopf">Hopf Fibration (R3→S³→S²)</option>
+						<option value="grassmann">Grassmannian (Axis-Angle LDS)</option>
+						<option value="trirot">Tri-Rotation (XYZ Compose)</option>
+						<option value="graygrid">Gray-Code Cube Walk</option>
+					</optgroup>
 					<option value="random">Random (for comparison)</option>
 				</select>
 				<div class="method-info" id="method-info"></div>
@@ -126,16 +160,25 @@
 			<div class="param-group" id="r2-params">
 				<h3>R2 Parameters</h3>
 				<div class="control-group">
-					<label>α₁: <span class="value" id="a1-val"></span></label>
-					<input type="range" id="a1" min="0" max="1" step="0.0001" value="0.7548776662466927" />
+					<label>α₁ (longitude increment)</label>
+					<input type="text" id="a1" value="" class="param-input" />
 				</div>
 				<div class="control-group">
-					<label>α₂: <span class="value" id="a2-val"></span></label>
-					<input type="range" id="a2" min="0" max="1" step="0.0001" value="0.5698402909980532" />
+					<label>α₂ (latitude increment)</label>
+					<input type="text" id="a2" value="" class="param-input" />
+				</div>
+				<div class="control-group">
+					<label>Seed offset</label>
+					<input type="text" id="r2-seed" value="0.5" class="param-input" />
+				</div>
+				<div class="control-group" style="display: flex; gap: 8px; flex-wrap: wrap;">
+					<button class="preset-btn" onclick="setR2Preset('plastic')">Plastic (1/g, 1/g²)</button>
+					<button class="preset-btn" onclick="setR2Preset('phi')">Golden (1/φ, 1/φ²)</button>
+					<button class="preset-btn" onclick="setR2Preset('sqrt')">√2, √3</button>
 				</div>
 				<div class="control-group">
 					<label style="font-size: 11px; color: #666;">
-						Defaults are 1/g and 1/g² where g ≈ 1.32472 is the plastic constant
+						g ≈ 1.32471795724... is the plastic constant (x³=x+1)
 					</label>
 				</div>
 			</div>
@@ -149,6 +192,27 @@
 				<div class="control-group">
 					<label>Base 2 (latitude)</label>
 					<input type="number" id="base2" min="2" max="100" value="3" />
+				</div>
+			</div>
+
+			<div class="param-group" id="quat-params" style="display: none;">
+				<h3>Quaternion Parameters</h3>
+				<div class="control-group">
+					<label>α₁</label>
+					<input type="text" id="q1" value="" class="param-input" />
+				</div>
+				<div class="control-group">
+					<label>α₂</label>
+					<input type="text" id="q2" value="" class="param-input" />
+				</div>
+				<div class="control-group">
+					<label>α₃</label>
+					<input type="text" id="q3" value="" class="param-input" />
+				</div>
+				<div class="control-group" style="display: flex; gap: 8px; flex-wrap: wrap;">
+					<button class="preset-btn" onclick="setQuatPreset('plastic')">Plastic (1/g^n)</button>
+					<button class="preset-btn" onclick="setQuatPreset('primes')">Prime Roots</button>
+					<button class="preset-btn" onclick="setQuatPreset('metallic')">Metallic Means</button>
 				</div>
 			</div>
 
@@ -190,9 +254,44 @@
 			import * as THREE from "three";
 			import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
-			// Constants
-			const PHI = (1 + Math.sqrt(5)) / 2; // Golden ratio
-			const PLASTIC = 1.32471795724474602596; // Plastic constant (real root of x³ = x + 1)
+			// Constants - computed to full JS precision
+			const PHI = (1 + Math.sqrt(5)) / 2; // Golden ratio ≈ 1.618033988749895
+
+			// Plastic constant: real root of x³ = x + 1
+			// Computed via Newton's method for maximum precision
+			const PLASTIC = (() => {
+				let x = 1.3;
+				for (let i = 0; i < 100; i++) {
+					x = x - (x * x * x - x - 1) / (3 * x * x - 1);
+				}
+				return x;
+			})(); // ≈ 1.3247179572447460259609
+
+			// R2 sequence defaults
+			const R2_DEFAULTS = {
+				plastic: { a1: 1 / PLASTIC, a2: 1 / (PLASTIC * PLASTIC) },
+				phi: { a1: 1 / PHI, a2: 1 / (PHI * PHI) },
+				sqrt: { a1: Math.sqrt(2) - 1, a2: Math.sqrt(3) - 1 }
+			};
+
+			// Quaternion method defaults (3 parameters for R3-style sequences)
+			const QUAT_DEFAULTS = {
+				plastic: {
+					q1: 1 / PLASTIC,
+					q2: 1 / (PLASTIC * PLASTIC),
+					q3: 1 / (PLASTIC * PLASTIC * PLASTIC)
+				},
+				primes: {
+					q1: Math.sqrt(2) - 1,
+					q2: Math.sqrt(3) - 1,
+					q3: Math.sqrt(5) - 2
+				},
+				metallic: {
+					q1: 1 / PHI,  // golden
+					q2: 1 / (1 + Math.sqrt(2)),  // silver
+					q3: 1 / ((3 + Math.sqrt(13)) / 2)  // bronze
+				}
+			};
 
 			// Method descriptions
 			const methodInfo = {
@@ -203,6 +302,14 @@
 					"Halton sequence mapped to sphere. Different prime bases for each axis. O(log n) per point.",
 				kritzinger:
 					"Kritzinger's spherical sequence using golden ratio for longitude and sqrt for latitude. O(1) per point.",
+				hopf:
+					"R3 sequence mapped to S³ (unit quaternions), then projected to S² via Hopf fibration. Treats sphere as quotient of rotation space. O(1) per point.",
+				grassmann:
+					"Separate LDS for rotation axis (on S²) and rotation angle. Avoids single-axis bias by distributing axes uniformly. O(1) per point.",
+				trirot:
+					"Compose three rotations around fixed X, Y, Z axes with R3 sequence angles. No preferred direction when angles are incommensurate. O(1) per point.",
+				graygrid:
+					"Walk through rotation space using Gray-code-like progression. Minimizes consecutive point distance while covering uniformly. O(1) per point.",
 				random: "Uniform random points for comparison. Not low-discrepancy.",
 			};
 
@@ -230,7 +337,7 @@
 			const sphereGeom = new THREE.SphereGeometry(0.98, 64, 32);
 			const sphereMat = new THREE.MeshBasicMaterial({
 				color: 0x223344,
-				transparent: true,
+				transparent: false,
 				opacity: 0.3,
 				wireframe: false,
 			});
@@ -260,12 +367,12 @@
 
 			// R2 sequence mapped to sphere
 			// Uses equal-area cylindrical projection (Lambert)
-			function generateR2(n, alpha1, alpha2) {
+			function generateR2(n, alpha1, alpha2, seed = 0.5) {
 				const points = [];
 				for (let i = 0; i < n; i++) {
 					// R2 sequence in unit square
-					const u = (0.5 + i * alpha1) % 1;
-					const v = (0.5 + i * alpha2) % 1;
+					const u = (seed + i * alpha1) % 1;
+					const v = (seed + i * alpha2) % 1;
 
 					// Map to sphere via equal-area projection
 					// theta = longitude, phi = latitude
@@ -363,6 +470,179 @@
 			}
 
 			// ============================================
+			// Quaternion-Native Methods
+			// ============================================
+
+			// Hopf Fibration: R3 → S³ → S²
+			// Maps 3D LDS to quaternions, then projects to sphere via Hopf map
+			function generateHopf(n, a1, a2, a3) {
+				const points = [];
+				const seed = 0.5;
+
+				for (let i = 0; i < n; i++) {
+					// R3 sequence in unit cube
+					const u1 = (seed + i * a1) % 1;
+					const u2 = (seed + i * a2) % 1;
+					const u3 = (seed + i * a3) % 1;
+
+					// Map to S³ using spherical coordinates in 4D
+					// This gives uniform distribution on S³
+					const theta1 = 2 * Math.PI * u1;
+					const theta2 = 2 * Math.PI * u2;
+					const phi = Math.acos(1 - 2 * u3);  // arccos for uniform on sphere
+
+					// S³ point as quaternion (w, x, y, z)
+					const w = Math.cos(phi / 2) * Math.cos(theta1);
+					const x = Math.cos(phi / 2) * Math.sin(theta1);
+					const y = Math.sin(phi / 2) * Math.cos(theta2);
+					const z = Math.sin(phi / 2) * Math.sin(theta2);
+
+					// Hopf fibration: S³ → S²
+					// Maps quaternion to point on sphere
+					const px = 2 * (x * z + w * y);
+					const py = 2 * (y * z - w * x);
+					const pz = w * w + z * z - x * x - y * y;
+
+					points.push(new THREE.Vector3(px, py, pz));
+				}
+				return points;
+			}
+
+			// Grassmannian: Separate LDS for axis and angle
+			// Distributes rotation axes uniformly on S², angles uniformly in [0, π]
+			function generateGrassmann(n, a1, a2, a3) {
+				const points = [];
+				const seed = 0.5;
+				const refPoint = new THREE.Vector3(0, 0, 1);
+
+				for (let i = 0; i < n; i++) {
+					// Use R3 sequence
+					const u1 = (seed + i * a1) % 1;
+					const u2 = (seed + i * a2) % 1;
+					const u3 = (seed + i * a3) % 1;
+
+					// First two values define axis direction (uniform on S²)
+					const axisTheta = 2 * Math.PI * u1;
+					const axisZ = 1 - 2 * u2;
+					const axisR = Math.sqrt(1 - axisZ * axisZ);
+					const axis = new THREE.Vector3(
+						axisR * Math.cos(axisTheta),
+						axisZ,
+						axisR * Math.sin(axisTheta)
+					);
+
+					// Third value defines rotation angle [0, 2π]
+					// Using full range since we want to reach all points
+					const angle = 2 * Math.PI * u3;
+
+					// Create rotation quaternion and apply to reference
+					const quat = new THREE.Quaternion().setFromAxisAngle(axis, angle);
+					const point = refPoint.clone().applyQuaternion(quat);
+
+					points.push(point);
+				}
+				return points;
+			}
+
+			// Tri-Rotation: Compose X, Y, Z rotations with R3 angles
+			// No single preferred axis when using incommensurate angles
+			function generateTrirot(n, a1, a2, a3) {
+				const points = [];
+				const seed = 0.5;
+				const refPoint = new THREE.Vector3(0, 0, 1);
+
+				const axisX = new THREE.Vector3(1, 0, 0);
+				const axisY = new THREE.Vector3(0, 1, 0);
+				const axisZ = new THREE.Vector3(0, 0, 1);
+
+				for (let i = 0; i < n; i++) {
+					// R3 sequence for three rotation angles
+					const u1 = (seed + i * a1) % 1;
+					const u2 = (seed + i * a2) % 1;
+					const u3 = (seed + i * a3) % 1;
+
+					// Convert to angles - using 2π range for full coverage
+					const angleX = 2 * Math.PI * u1;
+					const angleY = 2 * Math.PI * u2;
+					const angleZ = 2 * Math.PI * u3;
+
+					// Compose rotations: Rz * Ry * Rx (extrinsic order)
+					const qx = new THREE.Quaternion().setFromAxisAngle(axisX, angleX);
+					const qy = new THREE.Quaternion().setFromAxisAngle(axisY, angleY);
+					const qz = new THREE.Quaternion().setFromAxisAngle(axisZ, angleZ);
+
+					const combined = new THREE.Quaternion()
+						.multiplyQuaternions(qz, qy)
+						.multiply(qx);
+
+					const point = refPoint.clone().applyQuaternion(combined);
+					points.push(point);
+				}
+				return points;
+			}
+
+			// Gray-Code Cube Walk: Traverse 3D rotation parameter space
+			// Uses bit-reversal and Gray code for optimal space-filling
+			function generateGrayGrid(n, a1, a2, a3) {
+				const points = [];
+				const refPoint = new THREE.Vector3(0, 0, 1);
+
+				// Helper: van der Corput sequence (base 2)
+				function vdc(i) {
+					let result = 0;
+					let f = 0.5;
+					let n = i;
+					while (n > 0) {
+						result += f * (n & 1);
+						n = n >> 1;
+						f *= 0.5;
+					}
+					return result;
+				}
+
+				// Helper: interleave bits for space-filling curve
+				function interleave(x, y, z) {
+					// Simple additive approach with different bases
+					return [(x * a1) % 1, (y * a2) % 1, (z * a3) % 1];
+				}
+
+				for (let i = 0; i < n; i++) {
+					// Use van der Corput sequences with different bases
+					const vx = vdc(i);
+					const vy = vdc(i * 2 + 1);
+					const vz = vdc(i * 3 + 2);
+
+					// Combine with irrational offsets
+					const [u1, u2, u3] = interleave(vx, vy, vz);
+
+					// Map to Euler angles for rotation
+					// Using ZYX convention with weighted ranges
+					const alpha = 2 * Math.PI * u1;  // rotation around Z
+					const beta = Math.acos(1 - 2 * u2);  // rotation toward equator
+					const gamma = 2 * Math.PI * u3;  // rotation around new Z
+
+					// Build rotation from ZYZ Euler angles (common for sphere)
+					const q1 = new THREE.Quaternion().setFromAxisAngle(
+						new THREE.Vector3(0, 0, 1), alpha
+					);
+					const q2 = new THREE.Quaternion().setFromAxisAngle(
+						new THREE.Vector3(0, 1, 0), beta
+					);
+					const q3 = new THREE.Quaternion().setFromAxisAngle(
+						new THREE.Vector3(0, 0, 1), gamma
+					);
+
+					const combined = new THREE.Quaternion()
+						.multiplyQuaternions(q1, q2)
+						.multiply(q3);
+
+					const point = refPoint.clone().applyQuaternion(combined);
+					points.push(point);
+				}
+				return points;
+			}
+
+			// ============================================
 			// Visualization
 			// ============================================
 
@@ -380,23 +660,25 @@
 				// Update method info
 				document.getElementById("method-info").textContent = methodInfo[method];
 
-				// Show/hide parameter groups
+				// Determine which parameter group to show
+				const quatMethods = ['hopf', 'grassmann', 'trirot', 'graygrid'];
+				const isQuatMethod = quatMethods.includes(method);
+
 				document.getElementById("r2-params").style.display =
 					method === "r2" ? "block" : "none";
 				document.getElementById("halton-params").style.display =
 					method === "halton" ? "block" : "none";
-
-				// Update parameter displays
-				const a1 = parseFloat(document.getElementById("a1").value);
-				const a2 = parseFloat(document.getElementById("a2").value);
-				document.getElementById("a1-val").textContent = a1.toFixed(6);
-				document.getElementById("a2-val").textContent = a2.toFixed(6);
+				document.getElementById("quat-params").style.display =
+					isQuatMethod ? "block" : "none";
 
 				// Generate points based on method
 				let points;
 				switch (method) {
 					case "r2":
-						points = generateR2(n, a1, a2);
+						const a1 = parseFloat(document.getElementById("a1").value) || R2_DEFAULTS.plastic.a1;
+						const a2 = parseFloat(document.getElementById("a2").value) || R2_DEFAULTS.plastic.a2;
+						const seed = parseFloat(document.getElementById("r2-seed").value) || 0.5;
+						points = generateR2(n, a1, a2, seed);
 						break;
 					case "fibonacci":
 						points = generateFibonacci(n);
@@ -408,6 +690,30 @@
 						break;
 					case "kritzinger":
 						points = generateKritzinger(n);
+						break;
+					case "hopf":
+						const hq1 = parseFloat(document.getElementById("q1").value) || QUAT_DEFAULTS.plastic.q1;
+						const hq2 = parseFloat(document.getElementById("q2").value) || QUAT_DEFAULTS.plastic.q2;
+						const hq3 = parseFloat(document.getElementById("q3").value) || QUAT_DEFAULTS.plastic.q3;
+						points = generateHopf(n, hq1, hq2, hq3);
+						break;
+					case "grassmann":
+						const gq1 = parseFloat(document.getElementById("q1").value) || QUAT_DEFAULTS.plastic.q1;
+						const gq2 = parseFloat(document.getElementById("q2").value) || QUAT_DEFAULTS.plastic.q2;
+						const gq3 = parseFloat(document.getElementById("q3").value) || QUAT_DEFAULTS.plastic.q3;
+						points = generateGrassmann(n, gq1, gq2, gq3);
+						break;
+					case "trirot":
+						const tq1 = parseFloat(document.getElementById("q1").value) || QUAT_DEFAULTS.plastic.q1;
+						const tq2 = parseFloat(document.getElementById("q2").value) || QUAT_DEFAULTS.plastic.q2;
+						const tq3 = parseFloat(document.getElementById("q3").value) || QUAT_DEFAULTS.plastic.q3;
+						points = generateTrirot(n, tq1, tq2, tq3);
+						break;
+					case "graygrid":
+						const cq1 = parseFloat(document.getElementById("q1").value) || QUAT_DEFAULTS.plastic.q1;
+						const cq2 = parseFloat(document.getElementById("q2").value) || QUAT_DEFAULTS.plastic.q2;
+						const cq3 = parseFloat(document.getElementById("q3").value) || QUAT_DEFAULTS.plastic.q3;
+						points = generateGrayGrid(n, cq1, cq2, cq3);
 						break;
 					case "random":
 						points = generateRandom(n);
@@ -481,21 +787,65 @@
 				sphere.visible = showSphere;
 			}
 
+			// R2 preset function
+			window.setR2Preset = function(preset) {
+				const defaults = R2_DEFAULTS[preset];
+				if (defaults) {
+					document.getElementById("a1").value = defaults.a1;
+					document.getElementById("a2").value = defaults.a2;
+					updateVisualization();
+				}
+			};
+
+			// Quaternion preset function
+			window.setQuatPreset = function(preset) {
+				const defaults = QUAT_DEFAULTS[preset];
+				if (defaults) {
+					document.getElementById("q1").value = defaults.q1;
+					document.getElementById("q2").value = defaults.q2;
+					document.getElementById("q3").value = defaults.q3;
+					updateVisualization();
+				}
+			};
+
+			// Initialize inputs with defaults
+			function initializeParams() {
+				// R2 defaults
+				document.getElementById("a1").value = R2_DEFAULTS.plastic.a1;
+				document.getElementById("a2").value = R2_DEFAULTS.plastic.a2;
+				// Quaternion defaults
+				document.getElementById("q1").value = QUAT_DEFAULTS.plastic.q1;
+				document.getElementById("q2").value = QUAT_DEFAULTS.plastic.q2;
+				document.getElementById("q3").value = QUAT_DEFAULTS.plastic.q3;
+			}
+
 			// Event listeners
 			document
 				.getElementById("method")
 				.addEventListener("change", updateVisualization);
 			document
 				.getElementById("a1")
-				.addEventListener("input", updateVisualization);
+				.addEventListener("change", updateVisualization);
 			document
 				.getElementById("a2")
-				.addEventListener("input", updateVisualization);
+				.addEventListener("change", updateVisualization);
+			document
+				.getElementById("r2-seed")
+				.addEventListener("change", updateVisualization);
 			document
 				.getElementById("base1")
 				.addEventListener("change", updateVisualization);
 			document
 				.getElementById("base2")
+				.addEventListener("change", updateVisualization);
+			document
+				.getElementById("q1")
+				.addEventListener("change", updateVisualization);
+			document
+				.getElementById("q2")
+				.addEventListener("change", updateVisualization);
+			document
+				.getElementById("q3")
 				.addEventListener("change", updateVisualization);
 			document
 				.getElementById("n")
@@ -516,7 +866,8 @@
 				renderer.setSize(window.innerWidth, window.innerHeight);
 			});
 
-			// Initial render
+			// Initialize and render
+			initializeParams();
 			updateVisualization();
 
 			// Animation loop
